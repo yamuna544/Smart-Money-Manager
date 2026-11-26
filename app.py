@@ -3,7 +3,8 @@ import streamlit as st
 from datetime import date
 
 import sqlite3
-
+import csv
+import io
 # Connect to Database
 conn = sqlite3.connect(
     "money_manager.db",
@@ -222,28 +223,60 @@ amount = st.number_input(
 description = st.text_input("Description")
 transaction_date = st.date_input("Transaction Date", date.today())
 
+
+
 if st.button("Add Transaction"):
-    if amount > 0:
-        cursor.execute(
-            """
-            INSERT INTO transactions
-            (username, type, amount, description, date)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (
+
+    if amount <= 0:
+        st.warning("Please enter an amount greater than 0.")
+
+    elif transaction_type == "Expense":
+
+        cursor.execute("""
+            SELECT COALESCE(SUM(amount), 0)
+            FROM transactions
+            WHERE username = ? AND type = 'Income'
+        """, (st.session_state.current_user,))
+
+        available_income = float(cursor.fetchone()[0])
+
+        if available_income <= 0:
+            st.error("Please add income first. Expense is not allowed.")
+
+        elif amount > available_income:
+            st.error("Expense cannot be greater than total income.")
+
+        else:
+            cursor.execute("""
+                INSERT INTO transactions
+                (username, type, amount, description, date)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
                 st.session_state.current_user,
                 transaction_type,
                 amount,
                 description,
                 str(transaction_date)
-            )
-        )
+            ))
+
+            conn.commit()
+            st.success("Expense Saved Successfully!")
+
+    else:
+        cursor.execute("""
+            INSERT INTO transactions
+            (username, type, amount, description, date)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            st.session_state.current_user,
+            transaction_type,
+            amount,
+            description,
+            str(transaction_date)
+        ))
 
         conn.commit()
-
-        st.success("Transaction Saved Successfully!")
-    else:
-        st.warning("Please enter an amount greater than 0.")
+        st.success("Income Saved Successfully!")
 
 
 # Calculate Summary from Database
@@ -609,10 +642,6 @@ if user_question:
     })
 
     st.rerun()
-import csv
-import io
-import csv
-import io
 
 st.header("📥 Download Your Money Report")
 
